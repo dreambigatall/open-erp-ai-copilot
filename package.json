@@ -1,0 +1,33 @@
+{
+  "name": "erp-copilot",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Open-source AI copilot framework for ERP systems",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run dev --workspaces --if-present",
+    "lint": "eslint . --ext .ts,.tsx",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm test --workspaces --if-present",
+    "clean": "npm run clean --workspaces --if-present",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "eslint": "^8.57.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "prettier": "^3.2.0",
+    "lint-staged": "^15.2.0",
+    "husky": "^9.0.0"
+  },
+  "lint-staged": {
+  "*.{ts,tsx}": ["eslint --fix", "prettier --write"],
+  "*.{json,md,yaml}": ["prettier --write"]
+}
+}
