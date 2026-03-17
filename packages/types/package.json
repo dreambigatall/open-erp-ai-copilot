@@ -1,0 +1,11 @@
+{
+  "name": "@erp-copilot/types",
+  "version": "0.0.1",
+  "private": false,
+  "main": "dist/index.js",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  }
+}

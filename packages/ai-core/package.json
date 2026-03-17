@@ -1,5 +1,5 @@
 {
-  "name": "@erp-copilot/connector-mongo",
+  "name": "@erp-copilot/ai-core",
   "version": "0.0.1",
   "private": false,
   "main": "dist/index.js",
@@ -12,7 +12,9 @@
     "test": "vitest run --reporter=verbose"
   },
   "dependencies": {
-    "mongodb": "^6.5.0",
+    "@anthropic-ai/sdk": "^0.20.0",
+    "openai": "^4.40.0",
+    "@google/generative-ai": "^0.11.0",
     "@erp-copilot/types": "*"
   },
   "devDependencies": {

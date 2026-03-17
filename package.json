@@ -13,21 +13,32 @@
     "dev": "npm run dev --workspaces --if-present",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm test --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present",
-    "prepare": "husky"
+    "clean:modules": "node ./scripts/clean-node-modules.mjs",
+    "prepare": "husky",
+    "test": "vitest run --reporter=verbose"
   },
   "devDependencies": {
-    "typescript": "^5.4.0",
-    "eslint": "^8.57.0",
-    "@typescript-eslint/parser": "^7.0.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
-    "prettier": "^3.2.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.57.0",
+    "husky": "^9.0.0",
     "lint-staged": "^15.2.0",
-    "husky": "^9.0.0"
+    "prettier": "^3.2.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0"
   },
   "lint-staged": {
-  "*.{ts,tsx}": ["eslint --fix", "prettier --write"],
-  "*.{json,md,yaml}": ["prettier --write"]
-}
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yaml}": [
+      "prettier --write"
+    ]
+  },
+  "overrides": {
+    "esbuild": "0.21.5"
+  }
 }

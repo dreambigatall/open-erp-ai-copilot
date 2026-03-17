@@ -1,5 +1,5 @@
 {
-  "name": "@erp-copilot/connector-mongo",
+  "name": "@erp-copilot/connector-pg",
   "version": "0.0.1",
   "private": false,
   "main": "dist/index.js",
@@ -12,10 +12,11 @@
     "test": "vitest run --reporter=verbose"
   },
   "dependencies": {
-    "mongodb": "^6.5.0",
+    "pg": "^8.11.0",
     "@erp-copilot/types": "*"
   },
   "devDependencies": {
+    "@types/pg": "^8.11.0",
     "@types/node": "^20.0.0",
     "vitest": "^1.0.0"
   }
