@@ -13,8 +13,5 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
     pool: 'threads',
-    deps: {
-      inline: [/^@asamuzakjp\//, /^@csstools\//],
-    },
   },
 })

@@ -1,5 +1,5 @@
 export { AiCore } from './AiCore.js'
-export { buildSystemPrompt, detectModule, MODULE_HINTS } from './prompts.js'
+export { buildSystemPrompt, detectModule, detectIntent, MODULE_HINTS } from './prompts.js'
 export {
   createProvider,
   ClaudeProvider,
@@ -7,5 +7,5 @@ export {
   GeminiProvider,
   GrokProvider,
 } from './providers/index.js'
-export type { AiQueryResult } from './AiCore.js'
+export type { AiQueryResult, AiCoreOptions, AiTelemetryEvent } from './AiCore.js'
 export type { LLMProvider, LLMResponse, ProviderConfig, ProviderName } from './providers/index.js'

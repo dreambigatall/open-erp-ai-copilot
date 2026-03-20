@@ -62,6 +62,17 @@ export function ChartWidget({ widget }: { widget: Widget }) {
     )
   }
 
+  const pieValueKey = valueKeys[0]
+  if (!pieValueKey) {
+    return (
+      <WidgetCard widget={widget}>
+        <p className="text-sm text-gray-400">No data</p>
+      </WidgetCard>
+    )
+  }
+
+  const getColor = (idx: number): string => COLORS[idx % COLORS.length] ?? '#000000'
+
   return (
     <WidgetCard widget={widget}>
       <ResponsiveContainer width="100%" height={180}>
@@ -73,14 +84,14 @@ export function ChartWidget({ widget }: { widget: Widget }) {
               contentStyle={{ fontSize: 12, border: '0.5px solid #e5e7eb', borderRadius: 8 }}
             />
             {valueKeys.map((k, i) => (
-              <Bar key={k} dataKey={k} fill={COLORS[i % COLORS.length]} radius={[3, 3, 0, 0]} />
+              <Bar key={k} dataKey={k} fill={getColor(i)} radius={[3, 3, 0, 0]} />
             ))}
           </BarChart>
         ) : widget.type === 'pie' ? (
           <PieChart>
             <Pie
               data={rows}
-              dataKey={valueKeys[0]}
+              dataKey={pieValueKey}
               nameKey={xKey}
               cx="50%"
               cy="50%"
@@ -88,7 +99,7 @@ export function ChartWidget({ widget }: { widget: Widget }) {
               label
             >
               {rows.map((_, i) => (
-                <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                <Cell key={i} fill={getColor(i)} />
               ))}
             </Pie>
             <Tooltip contentStyle={{ fontSize: 12 }} />
@@ -102,13 +113,7 @@ export function ChartWidget({ widget }: { widget: Widget }) {
               contentStyle={{ fontSize: 12, border: '0.5px solid #e5e7eb', borderRadius: 8 }}
             />
             {valueKeys.map((k, i) => (
-              <Line
-                key={k}
-                dataKey={k}
-                stroke={COLORS[i % COLORS.length]}
-                strokeWidth={2}
-                dot={false}
-              />
+              <Line key={k} dataKey={k} stroke={getColor(i)} strokeWidth={2} dot={false} />
             ))}
           </LineChart>
         )}

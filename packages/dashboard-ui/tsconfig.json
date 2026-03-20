@@ -6,7 +6,7 @@
     "jsx": "react-jsx",
     "moduleResolution": "bundler",
     "module": "ESNext",
-    "rootDir": "src",
+    "rootDir": ".",
     "outDir": "dist",
     "types": ["vitest/globals"]
   },
