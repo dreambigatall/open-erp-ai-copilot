@@ -1,8 +1,8 @@
 import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react'
 import type { ChatMessage } from './types.js'
 import type { ConnectorInterface, SchemaContext } from '@erp-copilot/types'
+import { buildSystemPrompt } from '@erp-copilot/ai-core/prompts'
 import type { LLMProvider } from '@erp-copilot/ai-core'
-import { buildSystemPrompt } from '@erp-copilot/ai-core/src/prompts'
 
 interface CopilotContextValue {
   messages: ChatMessage[]

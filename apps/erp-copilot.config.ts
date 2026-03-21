@@ -38,12 +38,15 @@ const config: ERPCopilotConfig = {
 
   ai: {
     provider: (process.env['AI_PROVIDER'] as ProviderConfig['provider'] | undefined) ?? 'claude',
-    apiKey:
-      process.env['ANTHROPIC_API_KEY'] ??
-      process.env['OPENAI_API_KEY'] ??
-      process.env['GEMINI_API_KEY'] ??
-      process.env['GROK_API_KEY'],
-    model: process.env['AI_MODEL'] ?? undefined,
+    ...(() => {
+      const key =
+        process.env['ANTHROPIC_API_KEY'] ??
+        process.env['OPENAI_API_KEY'] ??
+        process.env['GEMINI_API_KEY'] ??
+        process.env['GROK_API_KEY']
+      return key ? { apiKey: key } : {}
+    })(),
+    ...(process.env['AI_MODEL'] ? { model: process.env['AI_MODEL'] } : {}),
     systemPromptPrefix: 'You are a helpful ERP assistant for Acme Corp.',
   },
 

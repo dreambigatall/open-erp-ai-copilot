@@ -2,13 +2,32 @@
   "name": "@erp-copilot/connector-mongo",
   "version": "0.0.1",
   "private": false,
+  "description": "MongoDB connector for ERP Copilot (schema + read queries)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/erp-copilot/erp-ai-copilot.git",
+    "directory": "packages/connector-mongo"
+  },
+  "bugs": {
+    "url": "https://github.com/erp-copilot/erp-ai-copilot/issues"
+  },
+  "homepage": "https://github.com/erp-copilot/erp-ai-copilot/tree/main/packages/connector-mongo#readme",
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "dev": "tsc --watch",
-    "clean": "rm -rf dist",
+    "clean": "node ../../scripts/rm-dist.mjs",
     "test": "vitest run --reporter=verbose"
   },
   "dependencies": {
@@ -17,6 +36,6 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "vitest": "^1.0.0"
+    "vitest": "^4.1.0"
   }
 }

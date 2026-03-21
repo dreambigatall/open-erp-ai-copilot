@@ -2,13 +2,37 @@
   "name": "@erp-copilot/ai-core",
   "version": "0.0.1",
   "private": false,
+  "description": "NL-to-query engine for ERP Copilot with pluggable LLM providers",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./prompts": {
+      "types": "./dist/prompts.d.ts",
+      "import": "./dist/prompts.js",
+      "default": "./dist/prompts.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/erp-copilot/erp-ai-copilot.git",
+    "directory": "packages/ai-core"
+  },
+  "bugs": {
+    "url": "https://github.com/erp-copilot/erp-ai-copilot/issues"
+  },
+  "homepage": "https://github.com/erp-copilot/erp-ai-copilot/tree/main/packages/ai-core#readme",
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "dev": "tsc --watch",
-    "clean": "rm -rf dist",
+    "clean": "node ../../scripts/rm-dist.mjs",
     "test": "vitest run --reporter=verbose"
   },
   "dependencies": {
@@ -19,6 +43,6 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "vitest": "^1.0.0"
+    "vitest": "^4.1.0"
   }
 }

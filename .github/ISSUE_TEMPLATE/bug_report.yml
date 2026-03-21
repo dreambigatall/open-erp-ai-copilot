@@ -1,0 +1,25 @@
+name: Bug report
+description: Something is broken or incorrect
+labels: [bug]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Clear description of the bug and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How can we reproduce it?
+      description: Steps, minimal code sample, or repo branch if possible.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node version (`node -v`), package versions if relevant.
+    validations:
+      required: false

@@ -5,7 +5,16 @@ import type { AiCore, LLMProvider, LLMResponse } from '@erp-copilot/ai-core'
 import type { ConnectorInterface, QueryResult, SchemaContext } from '@erp-copilot/types'
 import type { AiQueryResult } from '@erp-copilot/ai-core'
 
-const API_BASE_URL = 'http://localhost:3005'
+function resolveApiBaseUrl(): string {
+  const raw = import.meta.env.VITE_API_BASE_URL
+  if (typeof raw === 'string') {
+    const t = raw.trim()
+    if (t.length > 0) return t
+  }
+  return 'http://localhost:3005'
+}
+
+const API_BASE_URL = resolveApiBaseUrl()
 
 type ApiErrorPayload = {
   code?: string

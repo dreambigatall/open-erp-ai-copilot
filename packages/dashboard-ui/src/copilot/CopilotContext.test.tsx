@@ -1,13 +1,9 @@
 import React from 'react'
-import { render, act, screen } from '@testing-library/react'
+import { render, act, screen, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
 import { CopilotProvider, useCopilot } from './CopilotContext.js'
 import type { LLMProvider } from '@erp-copilot/ai-core'
 import type { ConnectorInterface, QueryResult, SchemaContext } from '@erp-copilot/types'
-
-vi.mock('@erp-copilot/ai-core/src/prompts', () => ({
-  buildSystemPrompt: vi.fn().mockReturnValue('mock system prompt'),
-}))
 
 const mockSchema: SchemaContext = {
   dbType: 'postgresql',
@@ -79,7 +75,7 @@ describe('CopilotContext', () => {
     expect(screen.getByTestId('msg-user').textContent).toBe('Hello')
   })
 
-  it('adds assistant message after complete()', () => {
+  it('adds assistant message after complete()', async () => {
     const mockProvider: LLMProvider = {
       name: 'test',
       model: 'test-model',
@@ -101,10 +97,12 @@ describe('CopilotContext', () => {
       sendButton.click()
     })
 
-    expect(screen.getByTestId('msg-assistant').textContent).toBe('Response text')
+    await waitFor(() => {
+      expect(screen.getByTestId('msg-assistant').textContent).toBe('Response text')
+    })
   })
 
-  it('uses completeStream when available', () => {
+  it('uses completeStream when available', async () => {
     async function* fakeStream() {
       await Promise.resolve()
       yield 'Hello '
@@ -134,7 +132,9 @@ describe('CopilotContext', () => {
       sendButton.click()
     })
 
-    expect(screen.getByTestId('msg-assistant').textContent).toBe('Hello world')
+    await waitFor(() => {
+      expect(screen.getByTestId('msg-assistant').textContent).toBe('Hello world')
+    })
     expect(completeMock).not.toHaveBeenCalled()
   })
 })

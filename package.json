@@ -4,6 +4,17 @@
   "version": "0.0.1",
   "description": "Open-source AI copilot framework for ERP systems",
   "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/erp-copilot/erp-ai-copilot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/erp-copilot/erp-ai-copilot/issues"
+  },
+  "homepage": "https://github.com/erp-copilot/erp-ai-copilot#readme",
   "workspaces": [
     "packages/*",
     "apps/*"
@@ -16,7 +27,7 @@
     "clean": "npm run clean --workspaces --if-present",
     "clean:modules": "node ./scripts/clean-node-modules.mjs",
     "prepare": "husky",
-    "test": "vitest run --reporter=verbose"
+    "test": "npm run test --workspaces --if-present"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.0.0",

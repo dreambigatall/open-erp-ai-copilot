@@ -2,14 +2,33 @@
   "name": "@erp-copilot/dashboard-ui",
   "version": "0.0.1",
   "private": false,
+  "description": "React dashboard UI for ERP Copilot",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/erp-copilot/erp-ai-copilot.git",
+    "directory": "packages/dashboard-ui"
+  },
+  "bugs": {
+    "url": "https://github.com/erp-copilot/erp-ai-copilot/issues"
+  },
+  "homepage": "https://github.com/erp-copilot/erp-ai-copilot/tree/main/packages/dashboard-ui#readme",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --reporter=verbose --environment jsdom",
-    "clean": "rm -rf dist"
+    "clean": "node ../../scripts/rm-dist.mjs"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.2.2",

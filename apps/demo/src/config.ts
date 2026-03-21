@@ -37,7 +37,7 @@ const config: ERPCopilotConfig = {
     dbName: process.env['MONGO_DB_NAME'] ?? 'erp_demo',
     connectionString:
       process.env['PG_CONNECTION_STRING'] ??
-      'postgresql://postgres:password@localhost:5432/erp_demo',
+      'postgresql://postgres:password@localhost:5433/erp_demo',
   } as unknown as ERPCopilotConfig['database'],
   ai: {
     provider: (process.env['AI_PROVIDER'] as ProviderConfig['provider'] | undefined) ?? 'claude',
