@@ -35,8 +35,8 @@
     "@erp-copilot/types": "*"
   },
   "devDependencies": {
-    "@types/pg": "^8.11.0",
-    "@types/node": "^20.0.0",
+    "@types/pg": "^8.20.0",
+    "@types/node": "^25.5.0",
     "vitest": "^4.1.0"
   }
 }
