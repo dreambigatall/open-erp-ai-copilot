@@ -13,7 +13,7 @@
   "dependencies": {
     "express": "^4.19.0",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.0",
+    "dotenv": "^17.3.1",
     "mongodb": "^6.5.0",
     "pg": "^8.11.0",
     "@erp-copilot/types": "*",
