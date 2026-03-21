@@ -14,7 +14,7 @@
     "express": "^4.19.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.0",
-    "mongodb": "^6.5.0",
+    "mongodb": "^7.1.0",
     "pg": "^8.11.0",
     "@erp-copilot/types": "*",
     "@erp-copilot/ai-core": "*",
