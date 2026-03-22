@@ -30,10 +30,10 @@ Your DB (MongoDB / PostgreSQL)
 
 ## Apps
 
-| App       | Path                    | Description                                                                  |
-| --------- | ----------------------- | ---------------------------------------------------------------------------- |
-| Demo API  | `apps/demo`             | Example Express server: `/api/query`, `/api/chat`, schema + telemetry routes |
-| Dashboard | `packages/dashboard-ui` | Vite + React UI; point it at the demo API base URL in dev                    |
+| App       | Path                    | Description                                                              |
+| --------- | ----------------------- | ------------------------------------------------------------------------ |
+| OpenDB    | `apps/demo`             | CLI (`opendb`) + Express API: interactive TUI, `/api/query`, `/api/chat` |
+| Dashboard | `packages/dashboard-ui` | Vite + React UI; point it at the demo API base URL in dev                |
 
 There is no separate `apps/api` in this repo; HTTP integration is demonstrated in **`apps/demo`**.
 
@@ -61,6 +61,59 @@ npm run dev -w @erp-copilot/demo
 
 # 5) Run dashboard UI (second terminal)
 npm run dev -w @erp-copilot/dashboard-ui
+```
+
+### Terminal CLI (opendb)
+
+The CLI is the fastest way to interact with your database. Just type a question — no commands needed.
+
+```bash
+# Build and link globally
+cd apps/demo && npm run build && npm link
+
+# Now just run:
+opendb                    # Opens interactive TUI (setup wizard runs on first use)
+opendb ask "top 5 customers by revenue"   # One-shot query with formatted table
+opendb doctor             # Check DB + AI provider status
+opendb init               # Re-run setup wizard
+opendb config show        # Show current config
+```
+
+**Inside the interactive TUI** — just type your question and press Enter:
+
+```
+> show me all invoices from last month
+> how many employees are in engineering
+> what's our total revenue this quarter
+```
+
+The CLI auto-detects intent (chat vs analytics query vs schema inspection).
+
+**Slash commands** inside the TUI:
+
+| Command                   | Description                        |
+| ------------------------- | ---------------------------------- |
+| `/help`                   | Show all commands                  |
+| `/clear`                  | Clear transcript                   |
+| `/schema`                 | Show database schema               |
+| `/query <question>`       | Force analytics mode (JSON output) |
+| `/doctor`                 | Connection status                  |
+| `/config`                 | Show current config                |
+| `/sessions`               | List saved sessions                |
+| `/export [json\|md\|csv]` | Export current session             |
+| `/exit`                   | Save & exit                        |
+
+**Shell completions:**
+
+```bash
+# Bash
+opendb completion bash >> ~/.bashrc
+
+# Zsh
+opendb completion zsh >> ~/.zshrc
+
+# Fish
+opendb completion fish > ~/.config/fish/completions/opendb.fish
 ```
 
 If you use a **fork**, replace the clone URL with your repository and update `repository` / `homepage` fields in `package.json` files before publishing packages.
