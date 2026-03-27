@@ -1,13 +1,12 @@
 /**
- * OpenDB Rich Terminal UI
- * Ink-based interactive chat with streaming, tables, spinners, slash commands.
+ * OpenDB Interactive Terminal Chat
+ * OpenCode-style TUI with thinking steps, clean formatting, full scrollback.
  */
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-nocheck — Ink and @types/react have known type conflicts under strict TS
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Box, Text, render, useApp, useStdout } from 'ink'
-import TextInput from 'ink-text-input'
-import Spinner from 'ink-spinner'
+import { createInterface } from 'node:readline'
+import { writeFile, mkdirSync, existsSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { homedir } from 'node:os'
+import chalk from 'chalk'
 import { buildSystemPrompt } from '@erp-copilot/ai-core'
 import type { CopilotRuntime } from './copilotRuntime.js'
 import {
@@ -22,42 +21,149 @@ import {
   type SessionMessage,
 } from './sessions.js'
 
-// --- Types ---
+// --- Terminal Helpers ---
 
-type Role = 'user' | 'assistant' | 'system' | 'table' | 'error'
+const dim = chalk.dim
+const bold = chalk.bold
+const cyan = chalk.cyan
+const green = chalk.green
+const yellow = chalk.yellow
+const red = chalk.red
+const gray = chalk.gray
+const white = chalk.white
+const magenta = chalk.magenta
 
-type ChatMsg = {
-  id: string
-  role: Role
-  content: string
-  headers?: string[]
-  rows?: Record<string, unknown>[]
-  meta?: string
+function out(text: string): void {
+  process.stdout.write(text)
 }
 
-type Intent = 'chat' | 'query' | 'schema' | 'help' | 'unknown'
-
-// --- Slash Commands ---
-
-type SlashCmd = {
-  name: string
-  aliases: string[]
-  description: string
-  usage: string
-  handler: (args: string, ctx: SlashContext) => Promise<void>
+function line(text = ''): void {
+  process.stdout.write(text + '\n')
 }
 
-type SlashContext = {
-  addMsg: (msg: Omit<ChatMsg, 'id'>) => void
-  rt: CopilotRuntime
-  exit: () => void
+// --- Spinner ---
+
+const spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+let spinnerTimer: ReturnType<typeof setInterval> | null = null
+let spinnerMsg = ''
+
+function startSpinner(msg: string): void {
+  spinnerMsg = msg
+  let i = 0
+  spinnerTimer = setInterval(() => {
+    out('\r  ' + yellow(spinnerFrames[i % spinnerFrames.length] ?? '⠋') + ' ' + dim(msg))
+    i++
+  }, 80)
 }
 
-function newId(): string {
-  return String(Date.now()) + '-' + Math.random().toString(36).slice(2, 9)
+function stopSpinner(success = true): void {
+  if (spinnerTimer) {
+    clearInterval(spinnerTimer)
+    spinnerTimer = null
+  }
+  if (success) {
+    out('\r  ' + green('✓') + ' ' + dim(spinnerMsg))
+    line()
+  } else {
+    out('\r  ' + red('✗') + ' ' + dim(spinnerMsg))
+    line()
+  }
+}
+
+function updateSpinnerMsg(msg: string): void {
+  spinnerMsg = msg
+}
+
+// --- Thinking Steps ---
+
+function thinkStep(icon: string, text: string, detail?: string): void {
+  const icons: Record<string, string> = {
+    search: magenta('⌕'),
+    brain: cyan('◉'),
+    db: yellow('⊞'),
+    query: green('⟐'),
+    check: green('✓'),
+    arrow: dim('→'),
+    dot: dim('·'),
+  }
+  const i = icons[icon] ?? dim('·')
+  if (detail) {
+    line('  ' + i + ' ' + white(text) + ' ' + detail)
+  } else {
+    line('  ' + i + ' ' + white(text))
+  }
+}
+
+// --- Table Renderer ---
+
+function renderTable(headers: string[], rows: Record<string, unknown>[]): void {
+  const maxRows = 30
+  const shown = rows.slice(0, maxRows)
+
+  const colWidths = headers.map((h) => {
+    const maxVal = shown.reduce((max, row) => Math.max(max, String(row[h] ?? '').length), h.length)
+    return Math.min(Math.max(maxVal + 2, h.length + 3), 35)
+  })
+
+  line(dim('  ┌' + colWidths.map((w) => '─'.repeat(w)).join('┬') + '┐'))
+  line(
+    bold(
+      '  │' +
+        headers
+          .map((h, i) => ' ' + cyan(h.toUpperCase().padEnd((colWidths[i] ?? 10) - 1)))
+          .join('│') +
+        '│',
+    ),
+  )
+  line(dim('  ├' + colWidths.map((w) => '─'.repeat(w)).join('┼') + '┤'))
+
+  for (let r = 0; r < shown.length; r++) {
+    const row = shown[r]
+    if (!row) continue
+    const isEven = r % 2 === 0
+    const rowColor = isEven ? white : gray
+    line(
+      '  │' +
+        headers
+          .map((h, i) => {
+            const width = colWidths[i] ?? 10
+            let val = String(row[h] ?? '')
+            if (val.length > width - 2) val = val.slice(0, width - 3) + '…'
+            return ' ' + rowColor(val.padEnd(width - 1))
+          })
+          .join('│') +
+        '│',
+    )
+  }
+
+  line(dim('  └' + colWidths.map((w) => '─'.repeat(w)).join('┴') + '┘'))
+
+  if (rows.length > maxRows) {
+    line(dim('    ... and ' + String(rows.length - maxRows) + ' more rows'))
+  }
+}
+
+// --- Header ---
+
+function printHeader(dbType: string, provider: string, model: string): void {
+  const title = ' OpenDB '
+  const info = dbType + ' · ' + provider + ' · ' + model
+  const width = 60
+
+  line()
+  line(cyan('  ╔' + '═'.repeat(width) + '╗'))
+  line(cyan('  ║') + bold(title.padEnd(width)) + cyan('║'))
+  line(cyan('  ║') + dim(info.padEnd(width)) + cyan('║'))
+  line(cyan('  ╚' + '═'.repeat(width) + '╝'))
+  line()
+  line(dim('  Ask anything about your database. Type /help for commands.'))
+  line(dim('  Ctrl+C to exit.'))
+  line()
 }
 
 // --- Intent Detection ---
+
+type Intent = 'chat' | 'query' | 'schema' | 'help' | 'unknown'
 
 function detectIntent(input: string): Intent {
   const lower = input.toLowerCase().trim()
@@ -78,680 +184,473 @@ function detectIntent(input: string): Intent {
   return 'chat'
 }
 
-// --- Output Formatters ---
+// --- Help ---
 
-function formatTableResult(result: {
-  queryRan: string
-  explanation: string
-  rows: Record<string, unknown>[]
-  rowCount: number
-  executionTimeMs: number
-}): { text: string; headers?: string[]; tableRows?: Record<string, unknown>[]; meta: string } {
-  const parts: string[] = []
-  if (result.explanation) parts.push(result.explanation)
-  const meta = String(result.rowCount) + ' rows · ' + String(result.executionTimeMs) + 'ms'
-  const first = result.rows[0]
-  if (first) {
-    return {
-      text: parts.join('\n'),
-      headers: Object.keys(first),
-      tableRows: result.rows,
-      meta,
-    }
+function printHelp(): void {
+  line()
+  line(cyan.bold('  OpenDB ') + dim('— AI-powered database assistant'))
+  line()
+  line(bold('  Just type your question:'))
+  line(dim('    show me top 5 customers by revenue'))
+  line(dim('    how many invoices were created this month'))
+  line(dim('    list all employees in engineering'))
+  line()
+  line(bold('  Slash Commands:'))
+  const cmds: [string, string][] = [
+    ['/help', 'Show this help'],
+    ['/clear', 'Clear screen'],
+    ['/schema', 'Show database schema as table'],
+    ['/query <q>', 'Force analytics mode (JSON output)'],
+    ['/doctor', 'Check connection & provider status'],
+    ['/config', 'Show current configuration'],
+    ['/sessions', 'List saved sessions'],
+    ['/export [fmt]', 'Export session (json|md|csv)'],
+    ['/exit', 'Save session & exit'],
+  ]
+  for (const [cmd, desc] of cmds) {
+    line('    ' + cyan(cmd.padEnd(18)) + dim(desc))
   }
-  return { text: parts.join('\n') || 'No results.', meta }
+  line()
 }
 
-function formatHelp(): string {
-  return [
-    '',
-    '  OpenDB — Ask questions about your database in plain language.',
-    '',
-    '  Just type your question and press Enter:',
-    '    show me top 5 customers by revenue',
-    '    how many invoices were created this month',
-    '    list all employees in engineering',
-    '',
-    '  Slash Commands:',
-    '    /help              Show this help',
-    '    /clear             Clear the transcript',
-    '    /schema            Show database schema',
-    '    /query <question>  Force analytics mode',
-    '    /doctor            Check connection status',
-    '    /config            Show current config',
-    '    /model <name>      Switch AI model',
-    '    /provider <name>   Switch AI provider',
-    '    /exit, /quit       Exit OpenDB',
-    '',
-    '  Keyboard:',
-    '    Enter              Send message',
-    '    Ctrl+C             Exit',
-    '',
-  ].join('\n')
-}
+// --- Session Tracking ---
 
-// --- Components ---
-
-function Header({
-  provider,
-  model,
-  dbType,
-  latency,
-}: {
-  provider: string
-  model: string
-  dbType: string
-  latency?: number | undefined
-}) {
-  return (
-    <Box borderStyle="round" borderColor="cyan" paddingX={1}>
-      <Text bold color="cyan">
-        {' OpenDB '}
-      </Text>
-      <Text dimColor>
-        {dbType} · {provider} · {model}
-        {latency !== undefined ? ' · ' + String(latency) + 'ms' : ''}
-      </Text>
-    </Box>
-  )
-}
-
-function StatusFooter({ busy, intent }: { busy: boolean; intent: Intent }) {
-  const intentLabel: Record<Intent, string> = {
-    chat: 'Chat',
-    query: 'Analytics',
-    schema: 'Schema',
-    help: 'Help',
-    unknown: '',
-  }
-  return (
-    <Box marginTop={0} justifyContent="space-between">
-      <Box>
-        {busy ? (
-          <Box>
-            <Spinner type="dots" />
-            <Text color="yellow"> Thinking...</Text>
-          </Box>
-        ) : (
-          <Text dimColor>Ready</Text>
-        )}
-      </Box>
-      <Box>
-        {intent !== 'unknown' && <Text dimColor> [{intentLabel[intent]}] </Text>}
-        <Text dimColor> Ctrl+C to exit</Text>
-      </Box>
-    </Box>
-  )
-}
-
-function MessageBubble({ msg, _cols }: { msg: ChatMsg; _cols: number }) {
-  if (msg.role === 'system') {
-    return (
-      <Box flexDirection="column" paddingX={1}>
-        <Text dimColor wrap="wrap">
-          {msg.content}
-        </Text>
-      </Box>
-    )
-  }
-
-  if (msg.role === 'error') {
-    return (
-      <Box flexDirection="column" paddingX={1}>
-        <Text color="red" wrap="wrap">
-          {msg.content}
-        </Text>
-      </Box>
-    )
-  }
-
-  if (msg.role === 'user') {
-    return (
-      <Box flexDirection="column" paddingX={1} marginTop={1}>
-        <Text>
-          <Text bold color="green">
-            {'You '}
-          </Text>
-          <Text wrap="wrap">{msg.content}</Text>
-        </Text>
-      </Box>
-    )
-  }
-
-  if (msg.role === 'table' && msg.headers && msg.rows) {
-    return (
-      <Box flexDirection="column" paddingX={1} marginTop={1}>
-        {msg.content && (
-          <Box marginBottom={1}>
-            <Text wrap="wrap">{msg.content}</Text>
-          </Box>
-        )}
-        <TableDisplay headers={msg.headers} rows={msg.rows} />
-        {msg.meta && (
-          <Box marginTop={1}>
-            <Text dimColor> {msg.meta}</Text>
-          </Box>
-        )}
-      </Box>
-    )
-  }
-
-  // assistant text
-  return (
-    <Box flexDirection="column" paddingX={1} marginTop={1}>
-      <Text>
-        <Text bold color="cyan">
-          {'DB '}
-        </Text>
-        <Text wrap="wrap">{msg.content}</Text>
-      </Text>
-      {msg.meta && (
-        <Box marginTop={0}>
-          <Text dimColor> {msg.meta}</Text>
-        </Box>
-      )}
-    </Box>
-  )
-}
-
-function TableDisplay({ headers, rows }: { headers: string[]; rows: Record<string, unknown>[] }) {
-  const maxRows = 25
-  const shown = rows.slice(0, maxRows)
-  const colWidths = headers.map((h) => {
-    const maxVal = shown.reduce((max, row) => Math.max(max, String(row[h] ?? '').length), h.length)
-    return Math.min(maxVal + 2, 30)
+function trackMsg(
+  session: Session,
+  role: string,
+  content: string,
+  extra?: Partial<SessionMessage>,
+): void {
+  session.messages.push({
+    role: role as SessionMessage['role'],
+    content,
+    timestamp: Date.now(),
+    ...extra,
   })
-
-  const sep = '┼' + colWidths.map((w) => '─'.repeat(w)).join('┼') + '┼'
-  const headerLine = '│' + headers.map((h, i) => ` ${h.padEnd(colWidths[i] - 1)}`).join('│') + '│'
-
-  const dataLines = shown.map(
-    (row) =>
-      '│' +
-      headers.map((h, i) => ` ${String(row[h] ?? '').padEnd(colWidths[i] - 1)}`).join('│') +
-      '│',
-  )
-
-  return (
-    <Box flexDirection="column">
-      <Text dimColor>{sep}</Text>
-      <Text bold>{headerLine}</Text>
-      <Text dimColor>{sep}</Text>
-      {dataLines.map((line, i) => (
-        <Text key={i}>{line}</Text>
-      ))}
-      <Text dimColor>{sep}</Text>
-      {rows.length > maxRows && <Text dimColor> ... and {rows.length - maxRows} more rows</Text>}
-    </Box>
-  )
+  session.updatedAt = Date.now()
+  if (role === 'user' && session.title === 'New session') {
+    session.title = generateTitle(content)
+  }
+  if (session.messages.length % 10 === 0) {
+    saveSession(session).catch(() => {})
+  }
 }
 
-// --- Main App ---
+// --- Main Entry ---
 
-function ChatApp({ rt }: { rt: CopilotRuntime }) {
-  const { exit } = useApp()
-  const { stdout } = useStdout()
-  const [messages, setMessages] = useState<ChatMsg[]>([])
-  const [input, setInput] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [intent, setIntent] = useState<Intent>('unknown')
-  const [lastLatency, setLastLatency] = useState<number | undefined>()
-  const bottomRef = useRef<boolean>(false)
-  const sessionRef = useRef<Session>({
+export async function runChatTui(rt: CopilotRuntime): Promise<void> {
+  await Promise.resolve()
+
+  const session: Session = {
     id: generateSessionId(),
     createdAt: Date.now(),
     updatedAt: Date.now(),
     title: 'New session',
     messages: [],
-  })
+  }
 
-  const cols = Math.max(40, stdout.columns || 80)
-  const maxVisible = 30
+  printHeader(rt.config.database.type, rt.provider.name, rt.provider.model)
 
-  const visible = useMemo(() => messages.slice(-maxVisible), [messages])
+  const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true })
 
-  const addMsg = useCallback((msg: Omit<ChatMsg, 'id'>) => {
-    setMessages((m) => [...m, { ...msg, id: newId() }])
-    // Track in session
-    const sessionMsg: SessionMessage = {
-      role: msg.role === 'error' ? 'error' : msg.role,
-      content: msg.content,
-      timestamp: Date.now(),
-      headers: msg.headers,
-      rows: msg.rows,
-      meta: msg.meta,
-    }
-    sessionRef.current.messages.push(sessionMsg)
-    sessionRef.current.updatedAt = Date.now()
-    if (msg.role === 'user' && sessionRef.current.title === 'New session') {
-      sessionRef.current.title = generateTitle(msg.content)
-    }
-    // Auto-save periodically
-    if (sessionRef.current.messages.length % 5 === 0) {
-      saveSession(sessionRef.current).catch(() => {})
-    }
-  }, [])
-
-  // Register slash commands
-  const slashCommands: SlashCmd[] = useMemo(
-    () => [
-      {
-        name: 'help',
-        aliases: ['h', '?'],
-        description: 'Show help',
-        usage: '/help',
-        handler: async (_args, ctx) => {
-          await Promise.resolve()
-          ctx.addMsg({ role: 'system', content: formatHelp() })
-        },
-      },
-      {
-        name: 'clear',
-        aliases: ['cls'],
-        description: 'Clear transcript',
-        usage: '/clear',
-        handler: async (_args, _ctx) => {
-          await Promise.resolve()
-          setMessages([{ id: newId(), role: 'system', content: '  Session cleared.' }])
-        },
-      },
-      {
-        name: 'schema',
-        aliases: ['tables', 'collections'],
-        description: 'Show database schema',
-        usage: '/schema',
-        handler: async (_args, ctx) => {
-          const schema = await rt.getSchema()
-          const lines = schema.collections.map(
-            (c) =>
-              '  ' +
-              c.name +
-              ' (' +
-              String(c.fields.length) +
-              ' fields, ~' +
-              String(c.estimatedCount) +
-              ' rows)',
-          )
-          ctx.addMsg({
-            role: 'system',
-            content: `Database: ${schema.dbName} (${schema.dbType})\n${lines.join('\n')}`,
-          })
-        },
-      },
-      {
-        name: 'query',
-        aliases: ['q', 'sql'],
-        description: 'Run analytics query',
-        usage: '/query <question>',
-        handler: async (args, ctx) => {
-          if (!args.trim()) {
-            ctx.addMsg({ role: 'error', content: 'Usage: /query <question>' })
-            return
-          }
-          await runQuery(args, ctx, rt, setLastLatency)
-        },
-      },
-      {
-        name: 'doctor',
-        aliases: ['status', 'ping'],
-        description: 'Check connection status',
-        usage: '/doctor',
-        handler: async (_args, ctx) => {
-          try {
-            await rt.connector.ping()
-            ctx.addMsg({
-              role: 'system',
-              content: `  Database: ${rt.config.database.type} — Connected\n  Provider: ${rt.provider.name}\n  Model: ${rt.provider.model}`,
-            })
-          } catch (err) {
-            ctx.addMsg({
-              role: 'error',
-              content: `  Connection failed: ${err instanceof Error ? err.message : String(err)}`,
-            })
-          }
-        },
-      },
-      {
-        name: 'config',
-        aliases: ['cfg'],
-        description: 'Show current config',
-        usage: '/config',
-        handler: async (_args, ctx) => {
-          await Promise.resolve()
-          const lines = [
-            '  App: ' + rt.config.appName,
-            '  Database: ' + rt.config.database.type,
-            '  AI Provider: ' + rt.provider.name,
-            '  AI Model: ' + rt.provider.model,
-            '  Modules: ' + rt.config.modules.join(', '),
-          ]
-          ctx.addMsg({ role: 'system', content: lines.join('\n') })
-        },
-      },
-      {
-        name: 'sessions',
-        aliases: ['ls', 'history'],
-        description: 'List saved sessions',
-        usage: '/sessions',
-        handler: async (_args, ctx) => {
-          const sessions = await listSessions()
-          if (sessions.length === 0) {
-            ctx.addMsg({ role: 'system', content: '  No saved sessions yet.' })
-            return
-          }
-          const lines = sessions.slice(0, 10).map((s) => {
-            const date = new Date(s.updatedAt).toLocaleDateString()
-            const msgs = s.messages.filter((m) => m.role === 'user').length
-            return '  ' + s.id + '  ' + date + '  ' + String(msgs) + ' messages  ' + s.title
-          })
-          ctx.addMsg({
-            role: 'system',
-            content:
-              '  Sessions (' +
-              String(Math.min(sessions.length, 10)) +
-              ' of ' +
-              String(sessions.length) +
-              '):\n\n' +
-              lines.join('\n'),
-          })
-        },
-      },
-      {
-        name: 'export',
-        aliases: ['save'],
-        description: 'Export current session',
-        usage: '/export [format]  (json|md|csv)',
-        handler: async (args, ctx) => {
-          const format = (args.trim().toLowerCase() || 'md') as 'json' | 'md' | 'csv'
-          const session = { ...sessionRef.current, messages: sessionRef.current.messages }
-          let output: string
-          let ext: string
-          if (format === 'json') {
-            output = exportAsJson(session)
-            ext = 'json'
-          } else if (format === 'csv') {
-            output = exportAsCsv(session)
-            ext = 'csv'
-          } else {
-            output = exportAsMarkdown(session)
-            ext = 'md'
-          }
-          const fs = await import('node:fs')
-          const path = await import('node:path')
-          const os = await import('node:os')
-          const dir = path.resolve(os.homedir(), '.opendb', 'exports')
-          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-          const filePath = path.resolve(dir, session.id + '.' + ext)
-          fs.writeFileSync(filePath, output, 'utf-8')
-          ctx.addMsg({ role: 'system', content: '  Exported to ' + filePath })
-        },
-      },
-      {
-        name: 'exit',
-        aliases: ['quit', 'q!'],
-        description: 'Exit OpenDB',
-        usage: '/exit',
-        handler: async (_args, ctx) => {
-          // Save session before exit
-          await saveSession(sessionRef.current)
-          ctx.exit()
-        },
-      },
-    ],
-    [rt],
-  )
-
-  // Auto-scroll to bottom
-  useEffect(() => {
-    bottomRef.current = true
-  }, [messages])
-
-  // Detect intent on input change
-  useEffect(() => {
-    if (input.startsWith('/')) {
-      setIntent('unknown')
-    } else if (input.trim()) {
-      setIntent(detectIntent(input))
-    } else {
-      setIntent('unknown')
-    }
-  }, [input])
-
-  // Welcome message
-  useEffect(() => {
-    setMessages([
-      {
-        id: newId(),
-        role: 'system',
-        content: [
-          '',
-          '  Welcome to OpenDB ',
-          '  Ask questions about your database in plain language.',
-          '',
-          '  Type your question and press Enter, or use /help for commands.',
-          '',
-        ].join('\n'),
-      },
-    ])
-  }, [])
-
-  const handleSubmit = useCallback(
-    async (value: string) => {
-      const trimmed = value.trim()
-      if (!trimmed) return
-      setInput('')
-      setIntent('unknown')
-
-      // Slash command
-      if (trimmed.startsWith('/')) {
-        const parts = trimmed.slice(1).split(/\s+/)
-        const cmdName = parts[0]?.toLowerCase() ?? ''
-        const args = parts.slice(1).join(' ')
-
-        const cmd = slashCommands.find((c) => c.name === cmdName || c.aliases.includes(cmdName))
-        if (cmd) {
-          addMsg({ role: 'user', content: trimmed })
-          setBusy(true)
-          try {
-            await cmd.handler(args, { addMsg, rt, exit })
-          } catch (err) {
-            addMsg({
-              role: 'error',
-              content: `Error: ${err instanceof Error ? err.message : String(err)}`,
-            })
-          } finally {
-            setBusy(false)
-          }
-          return
-        }
-        addMsg({
-          role: 'error',
-          content: `Unknown command: /${cmdName}. Try /help`,
-        })
-        return
-      }
-
-      // Normal message — auto-detect intent
-      addMsg({ role: 'user', content: trimmed })
-      setBusy(true)
-      const startTime = Date.now()
-
-      const detected = detectIntent(trimmed)
-
-      if (detected === 'help') {
-        addMsg({ role: 'system', content: formatHelp() })
-        setBusy(false)
-        return
-      }
-
-      if (detected === 'schema') {
-        try {
-          const schema = await rt.getSchema()
-          const rows = schema.collections.map((c) => ({
-            name: c.name,
-            fields: c.fields.length,
-            rows: '~' + String(c.estimatedCount),
-            types: c.fields
-              .slice(0, 3)
-              .map((f) => f.name)
-              .join(', '),
-          }))
-          addMsg({
-            role: 'table',
-            content: 'Database: ' + schema.dbName + ' (' + schema.dbType + ')',
-            headers: ['name', 'fields', 'rows', 'types'],
-            rows,
-            meta: String(schema.collections.length) + ' tables/collections',
-          })
-        } catch (err) {
-          addMsg({
-            role: 'error',
-            content: `Error: ${err instanceof Error ? err.message : String(err)}`,
-          })
-        }
-        setBusy(false)
-        return
-      }
-
-      if (detected === 'query') {
-        await runQuery(trimmed, { addMsg, rt, exit }, rt, setLastLatency)
-        setBusy(false)
-        return
-      }
-
-      // Chat mode — streaming
-      const assistantId = newId()
-      setMessages((m) => [...m, { id: assistantId, role: 'assistant', content: '' }])
-
-      try {
-        const schema = await rt.getSchema()
-        const systemPrompt = buildSystemPrompt(schema)
-        let acc = ''
-        for await (const chunk of rt.provider.completeStream(systemPrompt, trimmed)) {
-          acc += chunk
-          setMessages((m) => {
-            const copy = [...m]
-            const idx = copy.findIndex((x) => x.id === assistantId)
-            if (idx >= 0) {
-              const prev = copy[idx]
-              if (prev) copy[idx] = { ...prev, content: acc }
-            }
-            return copy
-          })
-        }
-        setLastLatency(Date.now() - startTime)
-        setMessages((m) => {
-          const copy = [...m]
-          const idx = copy.findIndex((x) => x.id === assistantId)
-          if (idx >= 0) {
-            const prev = copy[idx]
-            if (prev) copy[idx] = { ...prev, meta: String(Date.now() - startTime) + 'ms' }
-          }
-          return copy
-        })
-      } catch (err) {
-        setMessages((m) => {
-          const copy = [...m]
-          const idx = copy.findIndex((x) => x.id === assistantId)
-          const errText = `Error: ${err instanceof Error ? err.message : String(err)}`
-          if (idx >= 0) {
-            const prev = copy[idx]
-            if (prev) copy[idx] = { ...prev, role: 'error', content: errText }
-            return copy
-          }
-          return [...m, { id: newId(), role: 'error', content: errText }]
-        })
-      } finally {
-        setBusy(false)
-      }
-    },
-    [rt, exit, slashCommands, addMsg],
-  )
-
-  return (
-    <Box flexDirection="column" width={cols} height={process.stdout.rows || 30}>
-      <Header
-        provider={rt.provider.name}
-        model={rt.provider.model}
-        dbType={rt.config.database.type}
-        latency={lastLatency}
-      />
-
-      <Box flexDirection="column" flexGrow={1} overflow="hidden">
-        {visible.map((msg) => (
-          <MessageBubble key={msg.id} msg={msg} cols={cols} />
-        ))}
-      </Box>
-
-      <Box borderStyle="single" borderColor="gray" paddingX={1} marginTop={1}>
-        {busy ? (
-          <Box>
-            <Spinner type="dots" />
-            <Text color="yellow"> Working...</Text>
-          </Box>
-        ) : (
-          <Box flexDirection="row">
-            <Text color="green">{'>'} </Text>
-            <TextInput
-              value={input}
-              onChange={setInput}
-              onSubmit={(v) => {
-                void handleSubmit(v)
-              }}
-              placeholder="Ask anything... (/help)"
-            />
-          </Box>
-        )}
-      </Box>
-
-      <StatusFooter busy={busy} intent={intent} />
-    </Box>
-  )
-}
-
-// --- Query Runner Helper ---
-
-async function runQuery(
-  question: string,
-  ctx: SlashContext,
-  rt: CopilotRuntime,
-  setLatency: (ms: number) => void,
-): Promise<void> {
+  let busy = false
+  let queryCount = 0
   const startTime = Date.now()
-  try {
-    const schema = await rt.getSchema()
-    const result = await rt.aiCore.ask(question, rt.connector, schema)
-    const elapsed = Date.now() - startTime
-    setLatency(elapsed)
 
-    const formatted = formatTableResult(result)
-
-    if (formatted.tableRows && formatted.headers) {
-      ctx.addMsg({
-        role: 'table',
-        content: formatted.text,
-        headers: formatted.headers,
-        rows: formatted.tableRows,
-        meta: formatted.meta,
-      })
-    } else {
-      ctx.addMsg({
-        role: 'assistant',
-        content: formatted.text || result.explanation || 'No results.',
-        meta: formatted.meta,
-      })
-    }
-  } catch (err) {
-    ctx.addMsg({
-      role: 'error',
-      content: `Query failed: ${err instanceof Error ? err.message : String(err)}`,
+  function prompt(): void {
+    if (busy) return
+    rl.question(green('❯ ') + reset(), (line) => {
+      void handleInput(line)
     })
   }
-}
 
-// --- Entry Point ---
+  function reset(): string {
+    return ''
+  }
 
-export async function runChatTui(rt: CopilotRuntime): Promise<void> {
-  const { waitUntilExit } = render(<ChatApp rt={rt} />, { exitOnCtrlC: true })
-  await waitUntilExit()
+  async function handleInput(input: string): Promise<void> {
+    const trimmed = input.trim()
+    if (!trimmed) {
+      prompt()
+      return
+    }
+
+    // Slash commands
+    if (trimmed.startsWith('/')) {
+      await handleSlash(trimmed)
+      prompt()
+      return
+    }
+
+    // Normal message
+    trackMsg(session, 'user', trimmed)
+    const intent = detectIntent(trimmed)
+
+    if (intent === 'help') {
+      printHelp()
+      prompt()
+      return
+    }
+
+    if (intent === 'schema') {
+      await handleSchema()
+      prompt()
+      return
+    }
+
+    if (intent === 'query') {
+      await handleQuery(trimmed)
+      prompt()
+      return
+    }
+
+    // Chat — streaming with thinking steps
+    await handleChat(trimmed)
+    prompt()
+  }
+
+  async function handleSlash(trimmed: string): Promise<void> {
+    const parts = trimmed.slice(1).split(/\s+/)
+    const cmd = (parts[0] ?? '').toLowerCase()
+    const args = parts.slice(1).join(' ')
+
+    switch (cmd) {
+      case 'help':
+      case 'h':
+      case '?':
+        printHelp()
+        break
+
+      case 'clear':
+      case 'cls':
+        process.stdout.write('\x1B[2J\x1B[0f')
+        printHeader(rt.config.database.type, rt.provider.name, rt.provider.model)
+        break
+
+      case 'schema':
+      case 'tables':
+      case 'collections':
+        await handleSchema()
+        break
+
+      case 'query':
+      case 'q':
+        if (!args.trim()) {
+          line(red('  Usage: /query <question>'))
+        } else {
+          trackMsg(session, 'user', trimmed)
+          await handleQuery(args)
+        }
+        break
+
+      case 'doctor':
+      case 'status':
+        await handleDoctor()
+        break
+
+      case 'config':
+      case 'cfg': {
+        line()
+        line(bold('  ⚙ Configuration'))
+        line()
+        line('  ' + dim('App') + '         ' + white(rt.config.appName))
+        line('  ' + dim('Database') + '     ' + white(rt.config.database.type))
+        line('  ' + dim('AI Provider') + '  ' + white(rt.provider.name))
+        line('  ' + dim('AI Model') + '     ' + white(rt.provider.model))
+        line('  ' + dim('Modules') + '      ' + white(rt.config.modules.join(', ')))
+        line('  ' + dim('Session') + '      ' + white(session.id))
+        const elapsed = Math.round((Date.now() - startTime) / 1000)
+        line('  ' + dim('Uptime') + '       ' + white(String(elapsed) + 's'))
+        line()
+        break
+      }
+
+      case 'sessions':
+      case 'ls':
+      case 'history': {
+        const sessions = await listSessions()
+        if (sessions.length === 0) {
+          line(dim('  No saved sessions yet.'))
+        } else {
+          line()
+          line(bold('  📋 Recent Sessions'))
+          line()
+          for (const s of sessions.slice(0, 10)) {
+            const date = new Date(s.updatedAt).toLocaleDateString()
+            const msgs = s.messages.filter((m) => m.role === 'user').length
+            line(
+              '  ' +
+                cyan(s.id) +
+                '  ' +
+                dim(date) +
+                '  ' +
+                String(msgs) +
+                ' msgs  ' +
+                white(s.title),
+            )
+          }
+          line()
+        }
+        break
+      }
+
+      case 'export':
+      case 'save': {
+        const format = (args.trim().toLowerCase() || 'md') as 'json' | 'md' | 'csv'
+        let output: string
+        let ext: string
+        if (format === 'json') {
+          output = exportAsJson(session)
+          ext = 'json'
+        } else if (format === 'csv') {
+          output = exportAsCsv(session)
+          ext = 'csv'
+        } else {
+          output = exportAsMarkdown(session)
+          ext = 'md'
+        }
+        const dir = resolve(homedir(), '.opendb', 'exports')
+        if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+        const filePath = resolve(dir, session.id + '.' + ext)
+        writeFile(filePath, output, 'utf-8', () => {
+          line(green('  ✓ Exported to ' + filePath))
+          prompt()
+        })
+        return
+      }
+
+      case 'exit':
+      case 'quit':
+      case 'q!':
+        await saveSession(session)
+        line()
+        line(dim('  Session saved. Goodbye. 👋'))
+        line()
+        rl.close()
+        return
+
+      default:
+        line(red('  Unknown command: /' + cmd + '. Type /help'))
+        break
+    }
+  }
+
+  async function handleSchema(): Promise<void> {
+    busy = true
+    startSpinner('Fetching schema...')
+
+    try {
+      const schema = await rt.getSchema()
+      stopSpinner()
+
+      line()
+      line(bold('  📊 Database Schema'))
+      line(bold('  ') + dim(schema.dbName + ' (' + schema.dbType + ')'))
+      line()
+
+      const rows = schema.collections.map((c) => ({
+        name: c.name,
+        fields: String(c.fields.length),
+        rows: '~' + String(c.estimatedCount),
+        types: c.fields
+          .slice(0, 4)
+          .map((f) => f.type)
+          .join(', '),
+      }))
+
+      renderTable(['name', 'fields', 'rows', 'types'], rows)
+      trackMsg(
+        session,
+        'system',
+        'Schema displayed: ' + String(schema.collections.length) + ' collections',
+      )
+      line()
+    } catch (err) {
+      stopSpinner(false)
+      line(red('  ' + (err instanceof Error ? err.message : String(err))))
+      line()
+    }
+
+    busy = false
+  }
+
+  async function handleQuery(question: string): Promise<void> {
+    busy = true
+    queryCount++
+
+    line()
+    line(dim('  ── Query #' + String(queryCount) + ' ──────────────────────────────────'))
+
+    thinkStep('brain', 'Analyzing question...')
+    startSpinner('Connecting to database...')
+
+    const queryStart = Date.now()
+
+    try {
+      const schema = await rt.getSchema()
+      updateSpinnerMsg('Generating query with ' + rt.provider.name + '...')
+
+      const result = await rt.aiCore.ask(question, rt.connector, schema)
+      const elapsed = Date.now() - queryStart
+
+      stopSpinner()
+
+      line()
+
+      if (result.queryRan) {
+        thinkStep('query', 'Executed:', dim(result.queryRan))
+        line()
+      }
+
+      if (result.explanation) {
+        thinkStep('brain', result.explanation)
+      }
+
+      if (result.rows.length > 0) {
+        line()
+        const headers = Object.keys(result.rows[0] ?? {})
+        renderTable(headers, result.rows)
+        line()
+        line(
+          dim(
+            '    ' +
+              String(result.rowCount) +
+              ' rows · ' +
+              String(elapsed) +
+              'ms · ' +
+              result.provider +
+              ' · ' +
+              result.model,
+          ),
+        )
+      } else if (!result.queryRan) {
+        thinkStep('dot', 'No results returned.')
+      }
+
+      line()
+      line(dim('  ──────────────────────────────────────────────────'))
+      line()
+
+      const msgExtra: Partial<SessionMessage> = {
+        meta: String(result.rowCount) + ' rows · ' + String(elapsed) + 'ms',
+      }
+      if (result.rows.length > 0) {
+        msgExtra.headers = Object.keys(result.rows[0] ?? {})
+        msgExtra.rows = result.rows
+      }
+      trackMsg(session, 'assistant', result.explanation || '(query result)', msgExtra)
+    } catch (err) {
+      stopSpinner(false)
+      line(red('  Query failed: ' + (err instanceof Error ? err.message : String(err))))
+      line()
+    }
+
+    busy = false
+  }
+
+  async function handleChat(question: string): Promise<void> {
+    busy = true
+    queryCount++
+
+    line()
+    line(dim('  ── #' + String(queryCount) + ' ──────────────────────────────────────────'))
+
+    // Thinking steps
+    thinkStep('search', 'Understanding your question...')
+    thinkStep('brain', 'Detecting intent and module...')
+    thinkStep('db', 'Loading database schema...')
+
+    startSpinner('Generating response with ' + rt.provider.name + '...')
+
+    try {
+      const schema = await rt.getSchema()
+      const systemPrompt = buildSystemPrompt(schema)
+
+      stopSpinner()
+      thinkStep('check', 'Schema loaded (' + String(schema.collections.length) + ' collections)')
+      thinkStep('brain', 'Streaming response...')
+      line()
+
+      // Stream the response
+      out(cyan.bold('  ◈ '))
+      let chunkCount = 0
+      for await (const chunk of rt.provider.completeStream(systemPrompt, question)) {
+        out(chunk)
+        chunkCount++
+      }
+      line()
+      line()
+
+      thinkStep('check', 'Response complete (' + String(chunkCount) + ' chunks)')
+      line()
+      line(dim('  ──────────────────────────────────────────────────'))
+      line()
+
+      trackMsg(session, 'assistant', '(streamed response)')
+    } catch (err) {
+      stopSpinner(false)
+      line()
+      line(red('  ✗ Error: ' + (err instanceof Error ? err.message : String(err))))
+      line()
+    }
+
+    busy = false
+  }
+
+  async function handleDoctor(): Promise<void> {
+    busy = true
+    line()
+
+    startSpinner('Checking database connection...')
+    try {
+      await rt.connector.ping()
+      stopSpinner()
+    } catch (err) {
+      stopSpinner(false)
+    }
+
+    startSpinner('Checking AI provider...')
+    try {
+      const schema = await rt.getSchema()
+      stopSpinner()
+      line()
+      line(bold('  🏥 Health Check'))
+      line()
+      line(
+        '  ' + green('✓') + ' Database      ' + white(rt.config.database.type) + dim(' connected'),
+      )
+      line(
+        '  ' +
+          green('✓') +
+          ' AI Provider   ' +
+          white(rt.provider.name) +
+          dim(' · ' + rt.provider.model),
+      )
+      line(
+        '  ' +
+          green('✓') +
+          ' Schema        ' +
+          white(String(schema.collections.length) + ' collections'),
+      )
+      line('  ' + green('✓') + ' Session       ' + white(session.id))
+      line()
+    } catch (err) {
+      stopSpinner(false)
+      line(red('  AI provider check failed'))
+    }
+
+    busy = false
+  }
+
+  // Ctrl+C handler
+  rl.on('close', () => {
+    void saveSession(session).then(() => {
+      line()
+      line(dim('  Session saved. Goodbye. 👋'))
+      line()
+      process.exit(0)
+    })
+  })
+
+  prompt()
 }
