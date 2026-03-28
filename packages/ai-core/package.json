@@ -37,7 +37,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.0",
-    "openai": "^4.40.0",
+    "openai": "^6.33.0",
     "@google/generative-ai": "^0.11.0",
     "@erp-copilot/types": "*"
   },
