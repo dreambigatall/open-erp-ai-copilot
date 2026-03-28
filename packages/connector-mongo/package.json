@@ -31,7 +31,7 @@
     "test": "vitest run --reporter=verbose"
   },
   "dependencies": {
-    "mongodb": "^6.5.0",
+    "mongodb": "^7.1.1",
     "@erp-copilot/types": "*"
   },
   "devDependencies": {
