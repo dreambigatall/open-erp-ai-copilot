@@ -46,6 +46,6 @@
     "vitest": "^4.1.0"
   },
   "dependencies": {
-    "recharts": "^3.8.0"
+    "recharts": "^3.8.1"
   }
 }
