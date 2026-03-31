@@ -21,7 +21,7 @@
     "@erp-copilot/types": "*",
     "commander": "^12.1.0",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.0",
+    "dotenv": "^17.3.1",
     "express": "^4.19.0",
     "ink": "^5.2.1",
     "ink-text-input": "^6.0.0",
